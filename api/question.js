@@ -1,64 +1,100 @@
-
 export default async function handler(req, res) {
+  try {
+    const SHEET_ID = "1vidR51Lf_mWoC9buSL4g-b6Yq5kgz3R9UxcHR_DQKms";
+    const SHEET_NAME = "Sheet1";
 
-  const SHEET_ID = "1vidR51Lf_mWoC9buSL4g-b6Yq5kgz3R9UxcHR_DQKms";
+    const url =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(SHEET_NAME)}&tqx=out:json`;
 
-  const url =
-    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1`;
+    const response = await fetch(url);
 
-  const response = await fetch(url);
-  const csv = await response.text();
+    if (!response.ok) {
+      throw new Error(`Google Sheets returned ${response.status}`);
+    }
 
-  const rows = csv
-    .split("\n")
-    .slice(1)
-    .map(r => r.split(","));
+    const text = await response.text();
 
-  const handpicked = [];
-  const systempicked = [];
+    // Google returns:
+    // google.visualization.Query.setResponse(...)
+    const json = JSON.parse(
+      text.substring(47, text.length - 2)
+    );
 
-  rows.forEach(row => {
+    const rows = json.table.rows;
 
-    const id = row[0]?.replaceAll('"', '');
-    const source = row[1]?.replaceAll('"', '');
-    const message = row.slice(2).join(",").replaceAll('"', '');
+    const handpicked = [];
+    const systempicked = [];
 
-    const item = { id, message };
+    rows.forEach(row => {
+      const id = row.c?.[0]?.v ?? "";
+      const source = String(row.c?.[1]?.v ?? "").trim().toLowerCase();
+      const message = row.c?.[2]?.v ?? "";
 
-    if (source === "handpicked")
-      handpicked.push(item);
+      if (!id || !message) return;
 
-    if (source === "systempicked")
-      systempicked.push(item);
-  });
+      const item = {
+        id,
+        message
+      };
 
-  shuffle(handpicked);
-  shuffle(systempicked);
+      if (source === "handpicked") {
+        handpicked.push(item);
+      }
 
-  const selected = [
-    ...handpicked.slice(0, 21),
-    ...systempicked.slice(0, 9)
-  ];
+      if (source === "systempicked") {
+        systempicked.push(item);
+      }
+    });
 
-  shuffle(selected);
+    console.log("Handpicked:", handpicked.length);
+    console.log("Systempicked:", systempicked.length);
 
-  const output = {};
+    if (handpicked.length < 21) {
+      throw new Error(
+        `Need 21 handpicked items but found ${handpicked.length}`
+      );
+    }
 
-  selected.forEach((item, index) => {
+    if (systempicked.length < 9) {
+      throw new Error(
+        `Need 9 systempicked items but found ${systempicked.length}`
+      );
+    }
 
-    const n = index + 1;
+    shuffle(handpicked);
+    shuffle(systempicked);
 
-    output[`ID${n}`] = item.id;
-    output[`Q${n}`] = item.message;
-  });
+    const selected = [
+      ...handpicked.slice(0, 21),
+      ...systempicked.slice(0, 9)
+    ];
 
-  res.status(200).json(output);
+    shuffle(selected);
+
+    const output = {};
+
+    selected.forEach((item, index) => {
+      const n = index + 1;
+
+      output[`ID${n}`] = item.id;
+      output[`Q${n}`] = item.message;
+    });
+
+    output.totalReturned = selected.length;
+
+    return res.status(200).json(output);
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: error.message
+    });
+  }
 }
 
 function shuffle(array) {
-
   for (let i = array.length - 1; i > 0; i--) {
-
     const j = Math.floor(Math.random() * (i + 1));
 
     [array[i], array[j]] =
