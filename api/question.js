@@ -39,8 +39,7 @@ export default async function handler(req, res) {
 
       if (!id || !message) continue;
 
-      const count =
-        Number(await redis.get(`count:${id}`)) || 0;
+      const count = 0;
 
       const item = {
         id,
