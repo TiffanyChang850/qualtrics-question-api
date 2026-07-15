@@ -1,3 +1,6 @@
 {
-  "name": "qualtrics-question-api"
+  "name": "qualtrics-question-api",
+  "dependencies": {
+    "@upstash/redis": "^1.35.0"
+  }
 }
