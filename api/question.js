@@ -70,8 +70,8 @@ export default async function handler(req, res) {
     }
 
     const selected = [
-      ...selectBalancedRandom(handpicked, 21),
-      ...selectBalancedRandom(systempicked, 9)
+      ...selectBalancedRandom(handpicked, 9),
+      ...selectBalancedRandom(systempicked, 21)
     ];
 
     shuffle(selected);
