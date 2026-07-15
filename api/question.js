@@ -31,6 +31,7 @@ export default async function handler(req, res) {
     const systempicked = [];
 
     for (const row of rows) {
+
       const id = row.c?.[0]?.v ?? "";
       const source = String(
         row.c?.[1]?.v ?? ""
@@ -39,12 +40,10 @@ export default async function handler(req, res) {
 
       if (!id || !message) continue;
 
-      const count = 0;
-
       const item = {
         id,
         message,
-        count
+        count: 0
       };
 
       if (source === "handpicked") {
@@ -56,21 +55,48 @@ export default async function handler(req, res) {
       }
     }
 
-    if (handpicked.length < 21) {
+    if (handpicked.length < 9) {
       throw new Error(
-        `Need 21 handpicked items but found ${handpicked.length}`
+        `Need 9 handpicked items but found ${handpicked.length}`
       );
     }
 
-    if (systempicked.length < 9) {
+    if (systempicked.length < 21) {
       throw new Error(
-        `Need 9 systempicked items but found ${systempicked.length}`
+        `Need 21 systempicked items but found ${systempicked.length}`
       );
     }
+
+    shuffle(handpicked);
+    shuffle(systempicked);
+
+    const handCandidates =
+      handpicked.slice(0, Math.min(50, handpicked.length));
+
+    const systemCandidates =
+      systempicked.slice(0, Math.min(50, systempicked.length));
+
+    for (const item of handCandidates) {
+      item.count =
+        Number(await redis.get(`count:${item.id}`)) || 0;
+    }
+
+    for (const item of systemCandidates) {
+      item.count =
+        Number(await redis.get(`count:${item.id}`)) || 0;
+    }
+
+    handCandidates.sort(
+      (a, b) => a.count - b.count
+    );
+
+    systemCandidates.sort(
+      (a, b) => a.count - b.count
+    );
 
     const selected = [
-      ...selectBalancedRandom(handpicked, 9),
-      ...selectBalancedRandom(systempicked, 21)
+      ...handCandidates.slice(0, 9),
+      ...systemCandidates.slice(0, 21)
     ];
 
     shuffle(selected);
@@ -84,6 +110,7 @@ export default async function handler(req, res) {
     const output = {};
 
     selected.forEach((item, index) => {
+
       const n = index + 1;
 
       output[`ID${n}`] = item.id;
@@ -95,31 +122,13 @@ export default async function handler(req, res) {
     return res.status(200).json(output);
 
   } catch (error) {
+
     console.error(error);
 
     return res.status(500).json({
       error: error.message
     });
   }
-}
-
-function selectBalancedRandom(pool, count) {
-
-  const sorted = [...pool].sort(
-    (a, b) => a.count - b.count
-  );
-
-  const candidateSize = Math.max(
-    count,
-    Math.ceil(sorted.length * 0.5)
-  );
-
-  const candidates =
-    sorted.slice(0, candidateSize);
-
-  shuffle(candidates);
-
-  return candidates.slice(0, count);
 }
 
 function shuffle(array) {
