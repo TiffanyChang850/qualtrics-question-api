@@ -1,3 +1,10 @@
+import { Redis } from "@upstash/redis";
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 export default async function handler(req, res) {
   try {
     const SHEET_ID = "1vidR51Lf_mWoC9buSL4g-b6Yq5kgz3R9UxcHR_DQKms";
@@ -14,8 +21,6 @@ export default async function handler(req, res) {
 
     const text = await response.text();
 
-    // Google returns:
-    // google.visualization.Query.setResponse(...)
     const json = JSON.parse(
       text.substring(47, text.length - 2)
     );
@@ -25,16 +30,22 @@ export default async function handler(req, res) {
     const handpicked = [];
     const systempicked = [];
 
-    rows.forEach(row => {
+    for (const row of rows) {
       const id = row.c?.[0]?.v ?? "";
-      const source = String(row.c?.[1]?.v ?? "").trim().toLowerCase();
+      const source = String(
+        row.c?.[1]?.v ?? ""
+      ).trim().toLowerCase();
       const message = row.c?.[2]?.v ?? "";
 
-      if (!id || !message) return;
+      if (!id || !message) continue;
+
+      const count =
+        Number(await redis.get(`count:${id}`)) || 0;
 
       const item = {
         id,
-        message
+        message,
+        count
       };
 
       if (source === "handpicked") {
@@ -44,10 +55,7 @@ export default async function handler(req, res) {
       if (source === "systempicked") {
         systempicked.push(item);
       }
-    });
-
-    console.log("Handpicked:", handpicked.length);
-    console.log("Systempicked:", systempicked.length);
+    }
 
     if (handpicked.length < 21) {
       throw new Error(
@@ -61,15 +69,18 @@ export default async function handler(req, res) {
       );
     }
 
-    shuffle(handpicked);
-    shuffle(systempicked);
-
     const selected = [
-      ...handpicked.slice(0, 21),
-      ...systempicked.slice(0, 9)
+      ...selectBalancedRandom(handpicked, 21),
+      ...selectBalancedRandom(systempicked, 9)
     ];
 
     shuffle(selected);
+
+    await Promise.all(
+      selected.map(item =>
+        redis.incr(`count:${item.id}`)
+      )
+    );
 
     const output = {};
 
@@ -93,9 +104,32 @@ export default async function handler(req, res) {
   }
 }
 
+function selectBalancedRandom(pool, count) {
+
+  const sorted = [...pool].sort(
+    (a, b) => a.count - b.count
+  );
+
+  const candidateSize = Math.max(
+    count,
+    Math.ceil(sorted.length * 0.5)
+  );
+
+  const candidates =
+    sorted.slice(0, candidateSize);
+
+  shuffle(candidates);
+
+  return candidates.slice(0, count);
+}
+
 function shuffle(array) {
+
   for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+
+    const j = Math.floor(
+      Math.random() * (i + 1)
+    );
 
     [array[i], array[j]] =
       [array[j], array[i]];
