@@ -3,7 +3,7 @@ import { Redis } from "@upstash/redis";
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
-}); 
+});
 
 export default async function handler(req, res) {
   try {
@@ -11,7 +11,9 @@ export default async function handler(req, res) {
     const SHEET_NAME = "Sheet1";
 
     const url =
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(SHEET_NAME)}&tqx=out:json`;
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(
+        SHEET_NAME
+      )}&tqx=out:json`;
 
     const response = await fetch(url);
 
@@ -31,11 +33,14 @@ export default async function handler(req, res) {
     const systempicked = [];
 
     for (const row of rows) {
-
       const id = row.c?.[0]?.v ?? "";
+
       const source = String(
         row.c?.[1]?.v ?? ""
-      ).trim().toLowerCase();
+      )
+        .trim()
+        .toLowerCase();
+
       const message = row.c?.[2]?.v ?? "";
 
       if (!id || !message) continue;
@@ -43,6 +48,7 @@ export default async function handler(req, res) {
       const item = {
         id,
         message,
+        source,
         count: 0
       };
 
@@ -71,19 +77,29 @@ export default async function handler(req, res) {
     shuffle(systempicked);
 
     const handCandidates =
-      handpicked.slice(0, Math.min(50, handpicked.length));
+      handpicked.slice(
+        0,
+        Math.min(50, handpicked.length)
+      );
 
     const systemCandidates =
-      systempicked.slice(0, Math.min(50, systempicked.length));
+      systempicked.slice(
+        0,
+        Math.min(50, systempicked.length)
+      );
 
     for (const item of handCandidates) {
       item.count =
-        Number(await redis.get(`count:${item.id}`)) || 0;
+        Number(
+          await redis.get(`count:${item.id}`)
+        ) || 0;
     }
 
     for (const item of systemCandidates) {
       item.count =
-        Number(await redis.get(`count:${item.id}`)) || 0;
+        Number(
+          await redis.get(`count:${item.id}`)
+        ) || 0;
     }
 
     handCandidates.sort(
@@ -95,8 +111,18 @@ export default async function handler(req, res) {
     );
 
     const selected = [
-      ...handCandidates.slice(0, 9),
-      ...systemCandidates.slice(0, 21)
+      ...handCandidates
+        .slice(0, 9)
+        .map(item => ({
+          ...item,
+          source: "handpicked"
+        })),
+      ...systemCandidates
+        .slice(0, 21)
+        .map(item => ({
+          ...item,
+          source: "systempicked"
+        }))
     ];
 
     shuffle(selected);
@@ -107,22 +133,43 @@ export default async function handler(req, res) {
       )
     );
 
+    const handpickedSelected =
+      selected.filter(
+        item => item.source === "handpicked"
+      ).length;
+
+    const systempickedSelected =
+      selected.filter(
+        item => item.source === "systempicked"
+      ).length;
+
+    console.log({
+      handpickedSelected,
+      systempickedSelected
+    });
+
     const output = {};
 
     selected.forEach((item, index) => {
-
       const n = index + 1;
 
       output[`ID${n}`] = item.id;
+      output[`SOURCE${n}`] = item.source;
       output[`Q${n}`] = item.message;
     });
 
     output.totalReturned = selected.length;
 
+    output.debug = {
+      handpickedSelected,
+      systempickedSelected,
+      handpickedPool: handpicked.length,
+      systempickedPool: systempicked.length
+    };
+
     return res.status(200).json(output);
 
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
@@ -132,9 +179,11 @@ export default async function handler(req, res) {
 }
 
 function shuffle(array) {
-
-  for (let i = array.length - 1; i > 0; i--) {
-
+  for (
+    let i = array.length - 1;
+    i > 0;
+    i--
+  ) {
     const j = Math.floor(
       Math.random() * (i + 1)
     );
