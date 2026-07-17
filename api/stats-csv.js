@@ -7,7 +7,9 @@ const redis = new Redis({
 
 export default async function handler(req, res) {
   try {
-    const SHEET_ID = "1vidR51Lf_mWoC9buSL4g-b6Yq5kgz3R9UxcHR_DQKms";
+    const SHEET_ID =
+      "1vidR51Lf_mWoC9buSL4g-b6Yq5kgz3R9UxcHR_DQKms";
+
     const SHEET_NAME = "Sheet1";
 
     const url =
@@ -31,8 +33,7 @@ export default async function handler(req, res) {
 
     const rows = json.table.rows;
 
-    let csv =
-      "id,source,category,count,message\n";
+    const stats = [];
 
     for (const row of rows) {
 
@@ -42,10 +43,10 @@ export default async function handler(req, res) {
       const source =
         row.c?.[1]?.v ?? "";
 
-      const category =
+      const message =
         row.c?.[2]?.v ?? "";
 
-      const message =
+      const category =
         row.c?.[3]?.v ?? "";
 
       if (!id) continue;
@@ -55,14 +56,32 @@ export default async function handler(req, res) {
           await redis.get(`count:${id}`)
         ) || 0;
 
+      stats.push({
+        id,
+        source,
+        category,
+        message,
+        count
+      });
+    }
+
+    stats.sort(
+      (a, b) => b.count - a.count
+    );
+
+    let csv =
+      "id,source,category,count,message\n";
+
+    for (const item of stats) {
+
       const cleanMessage =
-        String(message)
+        String(item.message)
           .replace(/"/g, '""')
           .replace(/\n/g, " ")
           .replace(/\r/g, " ");
 
       csv +=
-        `"${id}","${source}","${category}",${count},"${cleanMessage}"\n`;
+        `"${item.id}","${item.source}","${item.category}",${item.count},"${cleanMessage}"\n`;
     }
 
     res.setHeader(
