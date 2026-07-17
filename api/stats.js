@@ -69,7 +69,14 @@ export default async function handler(req, res) {
       (a, b) => b.count - a.count
     );
 
-    return res.status(200).json(stats);
+    return res
+      .status(200)
+      .setHeader("Content-Type", "text/plain")
+      .send(
+        stats.map(item =>
+        JSON.stringify(item)
+      ).join("\n")
+  );
 
   } catch (error) {
 
