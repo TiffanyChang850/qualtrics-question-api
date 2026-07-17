@@ -1,55 +1,80 @@
 import { Redis } from "@upstash/redis";
-import { google } from "googleapis";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-async function getSheetData() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS), // ← YOUR SERVICE ACCOUNT JSON
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-  });
-
-  const sheets = google.sheets({ version: "v4", auth });
-
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: process.env.SPREADSHEET_ID, // ← YOUR GOOGLE SHEET ID
-    range: "Questions!A:C", // ← YOUR SHEET NAME AND COLUMNS
-  });
-
-  const rows = response.data.values || [];
-
-  const lookup = {};
-
-  for (const row of rows.slice(1)) {
-    lookup[row[0]] = {
-      message: row[1],   // ← COLUMN CONTAINING MESSAGE
-      category: row[2],  // ← COLUMN CONTAINING CATEGORY
-    };
-  }
-
-  return lookup;
-}
-
 export default async function handler(req, res) {
-  const keys = await redis.keys("count:*");
+  try {
+    const SHEET_ID =
+      "1vidR51Lf_mWoC9buSL4g-b6Yq5kgz3R9UxcHR_DQKms";
 
-  const sheetData = await getSheetData();
+    const SHEET_NAME = "Sheet1";
 
-  const results = [];
+    const url =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(
+        SHEET_NAME
+      )}&tqx=out:json`;
 
-  for (const key of keys) {
-    const id = key.replace("count:", "");
+    const response = await fetch(url);
 
-    results.push({
-      id,
-      count: await redis.get(key),
-      message: sheetData[id]?.message || "",
-      category: sheetData[id]?.category || "",
+    if (!response.ok) {
+      throw new Error(
+        `Google Sheets returned ${response.status}`
+      );
+    }
+
+    const text = await response.text();
+
+    const json = JSON.parse(
+      text.substring(47, text.length - 2)
+    );
+
+    const rows = json.table.rows;
+
+    const stats = [];
+
+    for (const row of rows) {
+
+      const id =
+        row.c?.[0]?.v ?? "";
+
+      const source =
+        row.c?.[1]?.v ?? "";
+
+      const category =
+        row.c?.[2]?.v ?? "";
+
+      const message =
+        row.c?.[3]?.v ?? "";
+
+      if (!id) continue;
+
+      const count =
+        Number(
+          await redis.get(`count:${id}`)
+        ) || 0;
+
+      stats.push({
+        id,
+        source,
+        category,
+        count,
+        message
+      });
+    }
+
+    stats.sort(
+      (a, b) => b.count - a.count
+    );
+
+    return res.status(200).json(stats);
+
+  } catch (error) {
+
+    return res.status(500).json({
+      error: error.message
     });
   }
-
-  res.status(200).json(results);
 }
