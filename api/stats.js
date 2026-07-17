@@ -81,6 +81,7 @@ export default async function handler(req, res) {
       JSON.stringify(item)
       ).join("\n")
     );
+    console.log("Total stats rows:", stats.length);
 
   } catch (error) {
 
