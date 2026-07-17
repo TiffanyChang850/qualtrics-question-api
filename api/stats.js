@@ -73,41 +73,14 @@ export default async function handler(req, res) {
       item => item.count
     );
 
-    return res.status(200).json({
-      totalQuestions: stats.length,
-
-      minCount:
-        counts.length > 0
-          ? Math.min(...counts)
-          : 0,
-
-      maxCount:
-        counts.length > 0
-          ? Math.max(...counts)
-          : 0,
-
-      averageCount:
-        counts.length > 0
-          ? (
-              counts.reduce(
-                (a, b) => a + b,
-                0
-              ) / counts.length
-            ).toFixed(2)
-          : 0,
-
-      handpickedQuestions:
-        stats.filter(
-          x => x.source === "handpicked"
-        ).length,
-
-      systempickedQuestions:
-        stats.filter(
-          x => x.source === "systempicked"
-        ).length,
-
-      stats
-    });
+  return res
+    .status(200)
+    .setHeader("Content-Type", "text/plain")
+    .send(
+      stats.map(item =>
+      JSON.stringify(item)
+      ).join("\n")
+    );
 
   } catch (error) {
 
