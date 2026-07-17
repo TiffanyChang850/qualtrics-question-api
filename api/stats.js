@@ -61,7 +61,7 @@ export default async function handler(req, res) {
         source,
         category,
         count,
-        message: message + "\n\n"
+        message
       });
     }
 
